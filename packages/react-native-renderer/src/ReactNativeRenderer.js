@@ -16,8 +16,9 @@ import {
   findHostInstance,
   findHostInstanceWithWarning,
   batchedUpdates as batchedUpdatesImpl,
-  interactiveUpdates,
-  flushInteractiveUpdates,
+  batchedEventUpdates,
+  discreteUpdates,
+  flushDiscreteUpdates,
   createContainer,
   updateContainer,
   injectIntoDevTools,
@@ -32,7 +33,7 @@ import {
 } from 'events/ReactGenericBatching';
 import ReactVersion from 'shared/ReactVersion';
 // Module provided by RN:
-import UIManager from 'UIManager';
+import {UIManager} from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
 
 import NativeMethodsMixin from './NativeMethodsMixin';
 import ReactNativeComponent from './ReactNativeComponent';
@@ -99,8 +100,9 @@ function findNodeHandle(componentOrHandle: any): ?number {
 
 setBatchingImplementation(
   batchedUpdatesImpl,
-  interactiveUpdates,
-  flushInteractiveUpdates,
+  discreteUpdates,
+  flushDiscreteUpdates,
+  batchedEventUpdates,
 );
 
 function computeComponentStackForErrorReporting(reactTag: number): string {
@@ -117,6 +119,19 @@ const ReactNativeRenderer: ReactNativeType = {
   NativeComponent: ReactNativeComponent(findNodeHandle, findHostInstance),
 
   findNodeHandle,
+
+  dispatchCommand(handle: any, command: string, args: Array<any>) {
+    if (handle._nativeTag == null) {
+      warningWithoutStack(
+        handle._nativeTag != null,
+        "dispatchCommand was called with a ref that isn't a " +
+          'native component. Use React.forwardRef to get access to the underlying native component',
+      );
+      return;
+    }
+
+    UIManager.dispatchViewManagerCommand(handle._nativeTag, command, args);
+  },
 
   setNativeProps,
 

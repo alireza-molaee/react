@@ -60,7 +60,7 @@ describe('ReactHooks', () => {
     const {useState, useLayoutEffect} = React;
 
     function Child({text}) {
-      Scheduler.yieldValue('Child: ' + text);
+      Scheduler.unstable_yieldValue('Child: ' + text);
       return text;
     }
 
@@ -73,9 +73,9 @@ describe('ReactHooks', () => {
       setCounter2 = _setCounter2;
 
       const text = `${counter1}, ${counter2}`;
-      Scheduler.yieldValue(`Parent: ${text}`);
+      Scheduler.unstable_yieldValue(`Parent: ${text}`);
       useLayoutEffect(() => {
-        Scheduler.yieldValue(`Effect: ${text}`);
+        Scheduler.unstable_yieldValue(`Effect: ${text}`);
       });
       return <Child text={text} />;
     }
@@ -95,7 +95,7 @@ describe('ReactHooks', () => {
       setCounter2(1);
     });
 
-    expect(Scheduler).toFlushAndYield([
+    expect(Scheduler).toHaveYielded([
       'Parent: 1, 1',
       'Child: 1, 1',
       'Effect: 1, 1',
@@ -103,7 +103,7 @@ describe('ReactHooks', () => {
 
     // Update that bails out.
     act(() => setCounter1(1));
-    expect(Scheduler).toFlushAndYield(['Parent: 1, 1']);
+    expect(Scheduler).toHaveYielded(['Parent: 1, 1']);
 
     // This time, one of the state updates but the other one doesn't. So we
     // can't bail out.
@@ -112,7 +112,7 @@ describe('ReactHooks', () => {
       setCounter2(2);
     });
 
-    expect(Scheduler).toFlushAndYield([
+    expect(Scheduler).toHaveYielded([
       'Parent: 1, 2',
       'Child: 1, 2',
       'Effect: 1, 2',
@@ -130,14 +130,15 @@ describe('ReactHooks', () => {
 
     // Because the final values are the same as the current values, the
     // component bails out.
-    expect(Scheduler).toFlushAndYield(['Parent: 1, 2']);
+    expect(Scheduler).toHaveYielded(['Parent: 1, 2']);
 
     // prepare to check SameValue
     act(() => {
       setCounter1(0 / -1);
       setCounter2(NaN);
     });
-    expect(Scheduler).toFlushAndYield([
+
+    expect(Scheduler).toHaveYielded([
       'Parent: 0, NaN',
       'Child: 0, NaN',
       'Effect: 0, NaN',
@@ -151,13 +152,13 @@ describe('ReactHooks', () => {
       setCounter2(NaN);
     });
 
-    expect(Scheduler).toFlushAndYield(['Parent: 0, NaN']);
+    expect(Scheduler).toHaveYielded(['Parent: 0, NaN']);
 
     // check if changing negative 0 to positive 0 does not bail out
     act(() => {
       setCounter1(0);
     });
-    expect(Scheduler).toFlushAndYield([
+    expect(Scheduler).toHaveYielded([
       'Parent: 0, NaN',
       'Child: 0, NaN',
       'Effect: 0, NaN',
@@ -168,7 +169,7 @@ describe('ReactHooks', () => {
     const {useState, memo} = React;
 
     function Child({text}) {
-      Scheduler.yieldValue('Child: ' + text);
+      Scheduler.unstable_yieldValue('Child: ' + text);
       return text;
     }
 
@@ -181,7 +182,7 @@ describe('ReactHooks', () => {
       setCounter2 = _setCounter2;
 
       const text = `${counter1}, ${counter2} (${theme})`;
-      Scheduler.yieldValue(`Parent: ${text}`);
+      Scheduler.unstable_yieldValue(`Parent: ${text}`);
       return <Child text={text} />;
     }
 
@@ -201,14 +202,14 @@ describe('ReactHooks', () => {
       setCounter2(1);
     });
 
-    expect(Scheduler).toFlushAndYield([
+    expect(Scheduler).toHaveYielded([
       'Parent: 1, 1 (light)',
       'Child: 1, 1 (light)',
     ]);
 
     // Update that bails out.
     act(() => setCounter1(1));
-    expect(Scheduler).toFlushAndYield(['Parent: 1, 1 (light)']);
+    expect(Scheduler).toHaveYielded(['Parent: 1, 1 (light)']);
 
     // This time, one of the state updates but the other one doesn't. So we
     // can't bail out.
@@ -217,7 +218,7 @@ describe('ReactHooks', () => {
       setCounter2(2);
     });
 
-    expect(Scheduler).toFlushAndYield([
+    expect(Scheduler).toHaveYielded([
       'Parent: 1, 2 (light)',
       'Child: 1, 2 (light)',
     ]);
@@ -227,10 +228,10 @@ describe('ReactHooks', () => {
     act(() => {
       setCounter1(1);
       setCounter2(2);
+      root.update(<Parent theme="dark" />);
     });
 
-    root.update(<Parent theme="dark" />);
-    expect(Scheduler).toFlushAndYield([
+    expect(Scheduler).toHaveYielded([
       'Parent: 1, 2 (dark)',
       'Child: 1, 2 (dark)',
     ]);
@@ -239,10 +240,10 @@ describe('ReactHooks', () => {
     act(() => {
       setCounter1(1);
       setCounter2(2);
+      root.update(<Parent theme="dark" />);
     });
 
-    root.update(<Parent theme="dark" />);
-    expect(Scheduler).toFlushAndYield(['Parent: 1, 2 (dark)']);
+    expect(Scheduler).toHaveYielded(['Parent: 1, 2 (dark)']);
   });
 
   it('warns about setState second argument', () => {
@@ -253,7 +254,7 @@ describe('ReactHooks', () => {
       const [counter, _setCounter] = useState(0);
       setCounter = _setCounter;
 
-      Scheduler.yieldValue(`Count: ${counter}`);
+      Scheduler.unstable_yieldValue(`Count: ${counter}`);
       return counter;
     }
 
@@ -275,7 +276,7 @@ describe('ReactHooks', () => {
         'declare it in the component body with useEffect().',
       {withoutStack: true},
     );
-    expect(Scheduler).toFlushAndYield(['Count: 1']);
+    expect(Scheduler).toHaveYielded(['Count: 1']);
     expect(root).toMatchRenderedOutput('1');
   });
 
@@ -287,7 +288,7 @@ describe('ReactHooks', () => {
       const [counter, _dispatch] = useReducer((s, a) => a, 0);
       dispatch = _dispatch;
 
-      Scheduler.yieldValue(`Count: ${counter}`);
+      Scheduler.unstable_yieldValue(`Count: ${counter}`);
       return counter;
     }
 
@@ -309,7 +310,7 @@ describe('ReactHooks', () => {
         'declare it in the component body with useEffect().',
       {withoutStack: true},
     );
-    expect(Scheduler).toFlushAndYield(['Count: 1']);
+    expect(Scheduler).toHaveYielded(['Count: 1']);
     expect(root).toMatchRenderedOutput('1');
   });
 
@@ -321,7 +322,7 @@ describe('ReactHooks', () => {
     let setTheme;
     function ThemeProvider({children}) {
       const [theme, _setTheme] = useState('light');
-      Scheduler.yieldValue('Theme: ' + theme);
+      Scheduler.unstable_yieldValue('Theme: ' + theme);
       setTheme = _setTheme;
       return (
         <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>
@@ -329,7 +330,7 @@ describe('ReactHooks', () => {
     }
 
     function Child({text}) {
-      Scheduler.yieldValue('Child: ' + text);
+      Scheduler.unstable_yieldValue('Child: ' + text);
       return text;
     }
 
@@ -341,20 +342,22 @@ describe('ReactHooks', () => {
       const theme = useContext(ThemeContext);
 
       const text = `${counter} (${theme})`;
-      Scheduler.yieldValue(`Parent: ${text}`);
+      Scheduler.unstable_yieldValue(`Parent: ${text}`);
       useLayoutEffect(() => {
-        Scheduler.yieldValue(`Effect: ${text}`);
+        Scheduler.unstable_yieldValue(`Effect: ${text}`);
       });
       return <Child text={text} />;
     }
-
     const root = ReactTestRenderer.create(null, {unstable_isConcurrent: true});
-    root.update(
-      <ThemeProvider>
-        <Parent />
-      </ThemeProvider>,
-    );
-    expect(Scheduler).toFlushAndYield([
+    act(() => {
+      root.update(
+        <ThemeProvider>
+          <Parent />
+        </ThemeProvider>,
+      );
+    });
+
+    expect(Scheduler).toHaveYielded([
       'Theme: light',
       'Parent: 0 (light)',
       'Child: 0 (light)',
@@ -370,7 +373,7 @@ describe('ReactHooks', () => {
 
     // Normal update
     act(() => setCounter(1));
-    expect(Scheduler).toFlushAndYield([
+    expect(Scheduler).toHaveYielded([
       'Parent: 1 (light)',
       'Child: 1 (light)',
       'Effect: 1 (light)',
@@ -379,7 +382,7 @@ describe('ReactHooks', () => {
 
     // Update that doesn't change state, so it bails out
     act(() => setCounter(1));
-    expect(Scheduler).toFlushAndYield(['Parent: 1 (light)']);
+    expect(Scheduler).toHaveYielded(['Parent: 1 (light)']);
     expect(root).toMatchRenderedOutput('1 (light)');
 
     // Update that doesn't change state, but the context changes, too, so it
@@ -389,7 +392,7 @@ describe('ReactHooks', () => {
       setTheme('dark');
     });
 
-    expect(Scheduler).toFlushAndYield([
+    expect(Scheduler).toHaveYielded([
       'Theme: dark',
       'Parent: 1 (dark)',
       'Child: 1 (dark)',
@@ -402,7 +405,7 @@ describe('ReactHooks', () => {
     const {useState, useLayoutEffect} = React;
 
     function Child({text}) {
-      Scheduler.yieldValue('Child: ' + text);
+      Scheduler.unstable_yieldValue('Child: ' + text);
       return text;
     }
 
@@ -410,9 +413,9 @@ describe('ReactHooks', () => {
     function Parent() {
       const [counter, _setCounter] = useState(0);
       setCounter = _setCounter;
-      Scheduler.yieldValue('Parent: ' + counter);
+      Scheduler.unstable_yieldValue('Parent: ' + counter);
       useLayoutEffect(() => {
-        Scheduler.yieldValue('Effect: ' + counter);
+        Scheduler.unstable_yieldValue('Effect: ' + counter);
       });
       return <Child text={counter} />;
     }
@@ -424,7 +427,7 @@ describe('ReactHooks', () => {
 
     // Normal update
     act(() => setCounter(1));
-    expect(Scheduler).toFlushAndYield(['Parent: 1', 'Child: 1', 'Effect: 1']);
+    expect(Scheduler).toHaveYielded(['Parent: 1', 'Child: 1', 'Effect: 1']);
     expect(root).toMatchRenderedOutput('1');
 
     // Update to the same state. React doesn't know if the queue is empty
@@ -432,7 +435,7 @@ describe('ReactHooks', () => {
     // enter the render phase before we can bail out. But we bail out before
     // rendering the child, and we don't fire any effects.
     act(() => setCounter(1));
-    expect(Scheduler).toFlushAndYield(['Parent: 1']);
+    expect(Scheduler).toHaveYielded(['Parent: 1']);
     expect(root).toMatchRenderedOutput('1');
 
     // Update to the same state again. This times, neither fiber has pending
@@ -443,14 +446,14 @@ describe('ReactHooks', () => {
 
     // This changes the state to something different so it renders normally.
     act(() => setCounter(2));
-    expect(Scheduler).toFlushAndYield(['Parent: 2', 'Child: 2', 'Effect: 2']);
+    expect(Scheduler).toHaveYielded(['Parent: 2', 'Child: 2', 'Effect: 2']);
     expect(root).toMatchRenderedOutput('2');
 
     // prepare to check SameValue
     act(() => {
       setCounter(0);
     });
-    expect(Scheduler).toFlushAndYield(['Parent: 0', 'Child: 0', 'Effect: 0']);
+    expect(Scheduler).toHaveYielded(['Parent: 0', 'Child: 0', 'Effect: 0']);
     expect(root).toMatchRenderedOutput('0');
 
     // Update to the same state for the first time to flush the queue
@@ -458,7 +461,7 @@ describe('ReactHooks', () => {
       setCounter(0);
     });
 
-    expect(Scheduler).toFlushAndYield(['Parent: 0']);
+    expect(Scheduler).toHaveYielded(['Parent: 0']);
     expect(root).toMatchRenderedOutput('0');
 
     // Update again to the same state. Should bail out.
@@ -472,7 +475,7 @@ describe('ReactHooks', () => {
     act(() => {
       setCounter(0 / -1);
     });
-    expect(Scheduler).toFlushAndYield(['Parent: 0', 'Child: 0', 'Effect: 0']);
+    expect(Scheduler).toHaveYielded(['Parent: 0', 'Child: 0', 'Effect: 0']);
     expect(root).toMatchRenderedOutput('0');
   });
 
@@ -480,7 +483,7 @@ describe('ReactHooks', () => {
     const {useState} = React;
 
     function Child({text}) {
-      Scheduler.yieldValue('Child: ' + text);
+      Scheduler.unstable_yieldValue('Child: ' + text);
       return text;
     }
 
@@ -488,7 +491,7 @@ describe('ReactHooks', () => {
     function Parent() {
       const [counter, _setCounter] = useState(0);
       setCounter = _setCounter;
-      Scheduler.yieldValue('Parent: ' + counter);
+      Scheduler.unstable_yieldValue('Parent: ' + counter);
       return <Child text={counter} />;
     }
 
@@ -499,11 +502,13 @@ describe('ReactHooks', () => {
 
     const update = value => {
       setCounter(previous => {
-        Scheduler.yieldValue(`Compute state (${previous} -> ${value})`);
+        Scheduler.unstable_yieldValue(
+          `Compute state (${previous} -> ${value})`,
+        );
         return value;
       });
     };
-    act(() => {
+    ReactTestRenderer.unstable_batchedUpdates(() => {
       update(0);
       update(0);
       update(0);
@@ -538,7 +543,7 @@ describe('ReactHooks', () => {
     const {useState} = React;
 
     function Child({text}) {
-      Scheduler.yieldValue('Child: ' + text);
+      Scheduler.unstable_yieldValue('Child: ' + text);
       return text;
     }
 
@@ -546,7 +551,7 @@ describe('ReactHooks', () => {
     function Parent() {
       const [counter, _setCounter] = useState(1);
       setCounter = _setCounter;
-      Scheduler.yieldValue('Parent: ' + counter);
+      Scheduler.unstable_yieldValue('Parent: ' + counter);
       return <Child text={counter} />;
     }
 
@@ -558,13 +563,15 @@ describe('ReactHooks', () => {
     const update = compute => {
       setCounter(previous => {
         const value = compute(previous);
-        Scheduler.yieldValue(`Compute state (${previous} -> ${value})`);
+        Scheduler.unstable_yieldValue(
+          `Compute state (${previous} -> ${value})`,
+        );
         return value;
       });
     };
 
     // Update at normal priority
-    act(() => update(n => n * 100));
+    ReactTestRenderer.unstable_batchedUpdates(() => update(n => n * 100));
 
     // The new state is eagerly computed.
     expect(Scheduler).toHaveYielded(['Compute state (1 -> 100)']);
@@ -596,7 +603,9 @@ describe('ReactHooks', () => {
     const {useLayoutEffect} = React;
     function App(props) {
       useLayoutEffect(() => {
-        Scheduler.yieldValue('Did commit: ' + props.dependencies.join(', '));
+        Scheduler.unstable_yieldValue(
+          'Did commit: ' + props.dependencies.join(', '),
+        );
       }, props.dependencies);
       return props.dependencies;
     }
@@ -617,7 +626,7 @@ describe('ReactHooks', () => {
     const {useMemo} = React;
     function App({text, hasDeps}) {
       const resolvedText = useMemo(() => {
-        Scheduler.yieldValue('Compute');
+        Scheduler.unstable_yieldValue('Compute');
         return text.toUpperCase();
       }, hasDeps ? null : [text]);
       return resolvedText;
@@ -649,7 +658,9 @@ describe('ReactHooks', () => {
     }
 
     expect(() => {
-      ReactTestRenderer.create(<App deps={'hello'} />);
+      act(() => {
+        ReactTestRenderer.create(<App deps={'hello'} />);
+      });
     }).toWarnDev([
       'Warning: useEffect received a final argument that is not an array (instead, received `string`). ' +
         'When specified, the final argument must be an array.',
@@ -661,7 +672,9 @@ describe('ReactHooks', () => {
         'When specified, the final argument must be an array.',
     ]);
     expect(() => {
-      ReactTestRenderer.create(<App deps={100500} />);
+      act(() => {
+        ReactTestRenderer.create(<App deps={100500} />);
+      });
     }).toWarnDev([
       'Warning: useEffect received a final argument that is not an array (instead, received `number`). ' +
         'When specified, the final argument must be an array.',
@@ -673,7 +686,9 @@ describe('ReactHooks', () => {
         'When specified, the final argument must be an array.',
     ]);
     expect(() => {
-      ReactTestRenderer.create(<App deps={{}} />);
+      act(() => {
+        ReactTestRenderer.create(<App deps={{}} />);
+      });
     }).toWarnDev([
       'Warning: useEffect received a final argument that is not an array (instead, received `object`). ' +
         'When specified, the final argument must be an array.',
@@ -684,9 +699,12 @@ describe('ReactHooks', () => {
       'Warning: useCallback received a final argument that is not an array (instead, received `object`). ' +
         'When specified, the final argument must be an array.',
     ]);
-    ReactTestRenderer.create(<App deps={[]} />);
-    ReactTestRenderer.create(<App deps={null} />);
-    ReactTestRenderer.create(<App deps={undefined} />);
+
+    act(() => {
+      ReactTestRenderer.create(<App deps={[]} />);
+      ReactTestRenderer.create(<App deps={null} />);
+      ReactTestRenderer.create(<App deps={undefined} />);
+    });
   });
 
   it('warns if deps is not an array for useImperativeHandle', () => {
@@ -977,8 +995,11 @@ describe('ReactHooks', () => {
       return null;
     }
 
-    const root = ReactTestRenderer.create(<App />);
-    expect(() => root.update(<App />)).toThrow(
+    expect(() => {
+      act(() => {
+        ReactTestRenderer.create(<App />);
+      });
+    }).toThrow(
       // The exact message doesn't matter, just make sure we don't allow this
       'Context can only be read while React is rendering',
     );
@@ -1170,7 +1191,9 @@ describe('ReactHooks', () => {
     }
     // Verify it doesn't think we're still inside a Hook.
     // Should have no warnings.
-    ReactTestRenderer.create(<Valid />);
+    act(() => {
+      ReactTestRenderer.create(<Valid />);
+    });
 
     // Verify warnings don't get permanently disabled.
     expect(() => {
@@ -1496,10 +1519,15 @@ describe('ReactHooks', () => {
           return null;
           /* eslint-enable no-unused-vars */
         }
-        let root = ReactTestRenderer.create(<App update={false} />);
+        let root;
+        act(() => {
+          root = ReactTestRenderer.create(<App update={false} />);
+        });
         expect(() => {
           try {
-            root.update(<App update={true} />);
+            act(() => {
+              root.update(<App update={true} />);
+            });
           } catch (error) {
             // Swapping certain types of hooks will cause runtime errors.
             // This is okay as far as this test is concerned.
@@ -1518,7 +1546,9 @@ describe('ReactHooks', () => {
 
         // further warnings for this component are silenced
         try {
-          root.update(<App update={false} />);
+          act(() => {
+            root.update(<App update={false} />);
+          });
         } catch (error) {
           // Swapping certain types of hooks will cause runtime errors.
           // This is okay as far as this test is concerned.
@@ -1539,10 +1569,16 @@ describe('ReactHooks', () => {
           return null;
           /* eslint-enable no-unused-vars */
         }
-        let root = ReactTestRenderer.create(<App update={false} />);
+        let root;
+        act(() => {
+          root = ReactTestRenderer.create(<App update={false} />);
+        });
+
         expect(() => {
           try {
-            root.update(<App update={true} />);
+            act(() => {
+              root.update(<App update={true} />);
+            });
           } catch (error) {
             // Swapping certain types of hooks will cause runtime errors.
             // This is okay as far as this test is concerned.
@@ -1601,9 +1637,15 @@ describe('ReactHooks', () => {
           return null;
           /* eslint-enable no-unused-vars */
         }
-        let root = ReactTestRenderer.create(<App update={false} />);
+        let root;
+        act(() => {
+          root = ReactTestRenderer.create(<App update={false} />);
+        });
+
         expect(() => {
-          root.update(<App update={true} />);
+          act(() => {
+            root.update(<App update={true} />);
+          });
         }).toThrow('Rendered fewer hooks than expected.');
       });
     });
@@ -1799,7 +1841,7 @@ describe('ReactHooks', () => {
     );
     expect(root).toMatchRenderedOutput('loading');
     await Promise.resolve();
-    Scheduler.flushAll();
+    Scheduler.unstable_flushAll();
     expect(root).toMatchRenderedOutput('hello');
   });
 
@@ -1831,7 +1873,7 @@ describe('ReactHooks', () => {
     );
     expect(root).toMatchRenderedOutput('loading');
     await Promise.resolve();
-    Scheduler.flushAll();
+    Scheduler.unstable_flushAll();
     expect(root).toMatchRenderedOutput('hello');
   });
 
@@ -1863,7 +1905,59 @@ describe('ReactHooks', () => {
     );
     expect(root).toMatchRenderedOutput('loading');
     await Promise.resolve();
-    Scheduler.flushAll();
+    Scheduler.unstable_flushAll();
     expect(root).toMatchRenderedOutput('hello');
+  });
+
+  // Regression test for https://github.com/facebook/react/issues/15732
+  it('resets hooks when an error is thrown in the middle of a list of hooks', async () => {
+    const {useEffect, useState} = React;
+
+    class ErrorBoundary extends React.Component {
+      state = {hasError: false};
+
+      static getDerivedStateFromError() {
+        return {hasError: true};
+      }
+
+      render() {
+        return (
+          <Wrapper>
+            {this.state.hasError ? 'Error!' : this.props.children}
+          </Wrapper>
+        );
+      }
+    }
+
+    function Wrapper({children}) {
+      return children;
+    }
+
+    let setShouldThrow;
+    function Thrower() {
+      const [shouldThrow, _setShouldThrow] = useState(false);
+      setShouldThrow = _setShouldThrow;
+
+      if (shouldThrow) {
+        throw new Error('Throw!');
+      }
+
+      useEffect(() => {}, []);
+
+      return 'Throw!';
+    }
+
+    let root;
+    act(() => {
+      root = ReactTestRenderer.create(
+        <ErrorBoundary>
+          <Thrower />
+        </ErrorBoundary>,
+      );
+    });
+
+    expect(root).toMatchRenderedOutput('Throw!');
+    act(() => setShouldThrow(true));
+    expect(root).toMatchRenderedOutput('Error!');
   });
 });

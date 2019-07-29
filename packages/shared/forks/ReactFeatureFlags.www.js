@@ -16,10 +16,11 @@ export const {
   debugRenderPhaseSideEffectsForStrictMode,
   replayFailedUnitOfWorkWithInvokeGuardedCallback,
   warnAboutDeprecatedLifecycles,
-  disableYielding,
   disableInputAttributeSyncing,
   warnAboutShorthandPropertyCollision,
   warnAboutDeprecatedSetNativeProps,
+  revertPassiveEffectsChange,
+  enableUserBlockingEvents,
 } = require('ReactFeatureFlags');
 
 // In www, we have experimental support for gathering data
@@ -67,9 +68,17 @@ function updateFlagOutsideOfReactCallStack() {
   }
 }
 
-export const enableEventAPI = true;
+export const enableFlareAPI = true;
+
+export const enableFundamentalAPI = false;
 
 export const enableJSXTransformAPI = true;
+
+export const warnAboutMissingMockScheduler = true;
+
+export const enableSuspenseCallback = true;
+
+export const warnAboutDefaultPropsOnFunctionComponents = false;
 
 // Flow magic to verify the exports of this file match the original version.
 // eslint-disable-next-line no-unused-vars

@@ -95,25 +95,6 @@ const bundles = [
     externals: ['react'],
   },
 
-  /******* React Fire *******/
-  {
-    bundleTypes: [
-      UMD_DEV,
-      UMD_PROD,
-      UMD_PROFILING,
-      NODE_DEV,
-      NODE_PROD,
-      NODE_PROFILING,
-      FB_WWW_DEV,
-      FB_WWW_PROD,
-      FB_WWW_PROFILING,
-    ],
-    moduleType: RENDERER,
-    entry: 'react-dom/unstable-fire',
-    global: 'ReactFire',
-    externals: ['react'],
-  },
-
   /******* Test Utils *******/
   {
     moduleType: RENDERER_UTILS,
@@ -204,38 +185,14 @@ const bundles = [
     moduleType: RENDERER,
     entry: 'react-native-renderer',
     global: 'ReactNativeRenderer',
-    externals: [
-      'ExceptionsManager',
-      'InitializeCore',
-      'Platform',
-      'RCTEventEmitter',
-      'TextInputState',
-      'UIManager',
-      'FabricUIManager',
-      'deepDiffer',
-      'deepFreezeAndThrowOnMutationInDev',
-      'flattenStyle',
-      'ReactNativeViewConfigRegistry',
-    ],
+    externals: ['react-native'],
   },
   {
     bundleTypes: [RN_OSS_DEV, RN_OSS_PROD, RN_OSS_PROFILING],
     moduleType: RENDERER,
     entry: 'react-native-renderer',
     global: 'ReactNativeRenderer',
-    externals: [
-      'ExceptionsManager',
-      'InitializeCore',
-      'Platform',
-      'RCTEventEmitter',
-      'TextInputState',
-      'UIManager',
-      'FabricUIManager',
-      'deepDiffer',
-      'deepFreezeAndThrowOnMutationInDev',
-      'flattenStyle',
-      'ReactNativeViewConfigRegistry',
-    ],
+    externals: ['react-native'],
   },
 
   /******* React Native Fabric *******/
@@ -244,38 +201,14 @@ const bundles = [
     moduleType: RENDERER,
     entry: 'react-native-renderer/fabric',
     global: 'ReactFabric',
-    externals: [
-      'ExceptionsManager',
-      'InitializeCore',
-      'Platform',
-      'RCTEventEmitter',
-      'TextInputState',
-      'UIManager',
-      'FabricUIManager',
-      'deepDiffer',
-      'deepFreezeAndThrowOnMutationInDev',
-      'flattenStyle',
-      'ReactNativeViewConfigRegistry',
-    ],
+    externals: ['react-native'],
   },
   {
     bundleTypes: [RN_OSS_DEV, RN_OSS_PROD, RN_OSS_PROFILING],
     moduleType: RENDERER,
     entry: 'react-native-renderer/fabric',
     global: 'ReactFabric',
-    externals: [
-      'ExceptionsManager',
-      'InitializeCore',
-      'Platform',
-      'RCTEventEmitter',
-      'TextInputState',
-      'UIManager',
-      'FabricUIManager',
-      'deepDiffer',
-      'deepFreezeAndThrowOnMutationInDev',
-      'flattenStyle',
-      'ReactNativeViewConfigRegistry',
-    ],
+    externals: ['react-native'],
   },
 
   /******* React Test Renderer *******/
@@ -418,7 +351,14 @@ const bundles = [
 
   /******* React Scheduler Mock (experimental) *******/
   {
-    bundleTypes: [NODE_DEV, NODE_PROD, FB_WWW_DEV, FB_WWW_PROD],
+    bundleTypes: [
+      UMD_DEV,
+      UMD_PROD,
+      NODE_DEV,
+      NODE_PROD,
+      FB_WWW_DEV,
+      FB_WWW_PROD,
+    ],
     moduleType: ISOMORPHIC,
     entry: 'scheduler/unstable_mock',
     global: 'SchedulerMock',
@@ -446,6 +386,23 @@ const bundles = [
     global: 'ESLintPluginReactHooks',
     externals: [],
   },
+
+  /******* React Fresh *******/
+  {
+    bundleTypes: [NODE_DEV, NODE_PROD],
+    moduleType: ISOMORPHIC,
+    entry: 'react-refresh/babel',
+    global: 'ReactFreshBabelPlugin',
+    externals: [],
+  },
+  {
+    bundleTypes: [NODE_DEV, NODE_PROD],
+    moduleType: ISOMORPHIC,
+    entry: 'react-refresh/runtime',
+    global: 'ReactFreshRuntime',
+    externals: [],
+  },
+
   {
     bundleTypes: [
       FB_WWW_DEV,
@@ -462,21 +419,6 @@ const bundles = [
   },
 
   /******* React Events (experimental) *******/
-  {
-    bundleTypes: [
-      UMD_DEV,
-      UMD_PROD,
-      NODE_DEV,
-      NODE_PROD,
-      FB_WWW_DEV,
-      FB_WWW_PROD,
-    ],
-    moduleType: ISOMORPHIC,
-    entry: 'react-events',
-    global: 'ReactEvents',
-    externals: [],
-  },
-
   {
     bundleTypes: [
       UMD_DEV,
@@ -564,6 +506,51 @@ const bundles = [
     moduleType: NON_FIBER_RENDERER,
     entry: 'react-events/drag',
     global: 'ReactEventsDrag',
+    externals: ['react'],
+  },
+
+  {
+    bundleTypes: [
+      UMD_DEV,
+      UMD_PROD,
+      NODE_DEV,
+      NODE_PROD,
+      FB_WWW_DEV,
+      FB_WWW_PROD,
+    ],
+    moduleType: NON_FIBER_RENDERER,
+    entry: 'react-events/input',
+    global: 'ReactEventsInput',
+    externals: ['react'],
+  },
+
+  {
+    bundleTypes: [
+      UMD_DEV,
+      UMD_PROD,
+      NODE_DEV,
+      NODE_PROD,
+      FB_WWW_DEV,
+      FB_WWW_PROD,
+    ],
+    moduleType: NON_FIBER_RENDERER,
+    entry: 'react-events/scroll',
+    global: 'ReactEventsScroll',
+    externals: ['react'],
+  },
+
+  {
+    bundleTypes: [
+      UMD_DEV,
+      UMD_PROD,
+      NODE_DEV,
+      NODE_PROD,
+      FB_WWW_DEV,
+      FB_WWW_PROD,
+    ],
+    moduleType: NON_FIBER_RENDERER,
+    entry: 'react-events/keyboard',
+    global: 'ReactEventsKeyboard',
     externals: ['react'],
   },
 ];

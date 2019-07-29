@@ -407,6 +407,11 @@ export default {
             continue;
           }
 
+          // Ignore Flow type parameters
+          if (def.type === 'TypeParameter') {
+            continue;
+          }
+
           // Add the dependency to a map so we can make sure it is referenced
           // again in our dependencies array. Remember whether it's static.
           if (!dependencies.has(dependency)) {
@@ -1144,7 +1149,7 @@ function collectRecommendations({
   let unnecessaryDependencies = new Set();
   let duplicateDependencies = new Set();
   declaredDependencies.forEach(({key}) => {
-    // Does this declared dep satsify a real need?
+    // Does this declared dep satisfy a real need?
     if (satisfyingDependencies.has(key)) {
       if (suggestedDependencies.indexOf(key) === -1) {
         // Good one.

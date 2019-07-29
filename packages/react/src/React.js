@@ -11,10 +11,10 @@ import {
   REACT_PROFILER_TYPE,
   REACT_STRICT_MODE_TYPE,
   REACT_SUSPENSE_TYPE,
+  REACT_SUSPENSE_LIST_TYPE,
 } from 'shared/ReactSymbols';
 
 import {Component, PureComponent} from './ReactBaseClasses';
-import {createEventComponent} from './ReactCreateEventComponent';
 import {createRef} from './ReactCreateRef';
 import {forEach, map, count, toArray, only} from './ReactChildren';
 import {
@@ -39,7 +39,9 @@ import {
   useReducer,
   useRef,
   useState,
+  useListener,
 } from './ReactHooks';
+import {withSuspenseConfig} from './ReactBatchConfig';
 import {
   createElementWithValidation,
   createFactoryWithValidation,
@@ -49,8 +51,13 @@ import {
   jsxWithValidationDynamic,
 } from './ReactElementValidator';
 import ReactSharedInternals from './ReactSharedInternals';
-import {error, warn} from './withComponentStack';
-import {enableEventAPI, enableJSXTransformAPI} from 'shared/ReactFeatureFlags';
+import createFundamental from 'shared/createFundamentalComponent';
+import createResponder from 'shared/createEventResponder';
+import {
+  enableJSXTransformAPI,
+  enableFlareAPI,
+  enableFundamentalAPI,
+} from 'shared/ReactFeatureFlags';
 const React = {
   Children: {
     map,
@@ -69,9 +76,6 @@ const React = {
   lazy,
   memo,
 
-  error,
-  warn,
-
   useCallback,
   useContext,
   useEffect,
@@ -87,6 +91,7 @@ const React = {
   Profiler: REACT_PROFILER_TYPE,
   StrictMode: REACT_STRICT_MODE_TYPE,
   Suspense: REACT_SUSPENSE_TYPE,
+  unstable_SuspenseList: REACT_SUSPENSE_LIST_TYPE,
 
   createElement: __DEV__ ? createElementWithValidation : createElement,
   cloneElement: __DEV__ ? cloneElementWithValidation : cloneElement,
@@ -95,17 +100,24 @@ const React = {
 
   version: ReactVersion,
 
+  unstable_withSuspenseConfig: withSuspenseConfig,
+
   __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: ReactSharedInternals,
 };
+
+if (enableFlareAPI) {
+  React.unstable_useListener = useListener;
+  React.unstable_createResponder = createResponder;
+}
+
+if (enableFundamentalAPI) {
+  React.unstable_createFundamental = createFundamental;
+}
 
 // Note: some APIs are added with feature flags.
 // Make sure that stable builds for open source
 // don't modify the React object to avoid deopts.
 // Also let's not expose their names in stable builds.
-
-if (enableEventAPI) {
-  React.unstable_createEventComponent = createEventComponent;
-}
 
 if (enableJSXTransformAPI) {
   if (__DEV__) {

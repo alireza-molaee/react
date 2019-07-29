@@ -12,12 +12,7 @@ import type {Fiber} from './ReactFiber';
 import type {StackCursor} from './ReactFiberStack';
 import type {ExpirationTime} from './ReactFiberExpirationTime';
 
-export type ContextDependencyList = {
-  first: ContextDependency<mixed>,
-  expirationTime: ExpirationTime,
-};
-
-type ContextDependency<T> = {
+export type ContextDependency<T> = {
   context: ReactContext<T>,
   observedBits: number,
   next: ContextDependency<mixed> | null,
@@ -59,7 +54,7 @@ let lastContextWithAllBitsObserved: ReactContext<any> | null = null;
 
 let isDisallowedContextReadInDEV: boolean = false;
 
-export function resetContextDependences(): void {
+export function resetContextDependencies(): void {
   // This is called right before React yields execution, to ensure `readContext`
   // cannot be called outside the render phase.
   currentlyRenderingFiber = null;
@@ -155,7 +150,7 @@ export function calculateChangedBits<T>(
   }
 }
 
-function scheduleWorkOnParentPath(
+export function scheduleWorkOnParentPath(
   parent: Fiber | null,
   renderExpirationTime: ExpirationTime,
 ) {
@@ -201,11 +196,11 @@ export function propagateContextChange(
     let nextFiber;
 
     // Visit this fiber.
-    const list = fiber.contextDependencies;
+    const list = fiber.dependencies;
     if (list !== null) {
       nextFiber = fiber.child;
 
-      let dependency = list.first;
+      let dependency = list.firstContext;
       while (dependency !== null) {
         // Check if the context matches.
         if (
@@ -216,7 +211,7 @@ export function propagateContextChange(
 
           if (fiber.tag === ClassComponent) {
             // Schedule a force update on the work-in-progress.
-            const update = createUpdate(renderExpirationTime);
+            const update = createUpdate(renderExpirationTime, null);
             update.tag = ForceUpdate;
             // TODO: Because we don't have a work-in-progress, this will add the
             // update to the current fiber, too, which means it will persist even if
@@ -315,17 +310,18 @@ export function prepareToReadContext(
   lastContextDependency = null;
   lastContextWithAllBitsObserved = null;
 
-  const currentDependencies = workInProgress.contextDependencies;
-  if (
-    currentDependencies !== null &&
-    currentDependencies.expirationTime >= renderExpirationTime
-  ) {
-    // Context list has a pending update. Mark that this fiber performed work.
-    markWorkInProgressReceivedUpdate();
+  const dependencies = workInProgress.dependencies;
+  if (dependencies !== null) {
+    const firstContext = dependencies.firstContext;
+    if (firstContext !== null) {
+      if (dependencies.expirationTime >= renderExpirationTime) {
+        // Context list has a pending update. Mark that this fiber performed work.
+        markWorkInProgressReceivedUpdate();
+      }
+      // Reset the work-in-progress list
+      dependencies.firstContext = null;
+    }
   }
-
-  // Reset the work-in-progress list
-  workInProgress.contextDependencies = null;
 }
 
 export function readContext<T>(
@@ -378,9 +374,11 @@ export function readContext<T>(
 
       // This is the first dependency for this component. Create a new list.
       lastContextDependency = contextItem;
-      currentlyRenderingFiber.contextDependencies = {
-        first: contextItem,
+      currentlyRenderingFiber.dependencies = {
         expirationTime: NoWork,
+        firstContext: contextItem,
+        listeners: null,
+        responders: null,
       };
     } else {
       // Append a new context item.

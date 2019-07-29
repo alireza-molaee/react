@@ -92,7 +92,7 @@ describe('ReactIncrementalScheduling', () => {
     function Text({text}) {
       useEffect(
         () => {
-          Scheduler.yieldValue(text);
+          Scheduler.unstable_yieldValue(text);
         },
         [text],
       );
@@ -104,7 +104,7 @@ describe('ReactIncrementalScheduling', () => {
       ReactNoop.renderToRootWithID(<Text text="b:1" />, 'b');
       ReactNoop.renderToRootWithID(<Text text="c:1" />, 'c');
     });
-    expect(Scheduler).toFlushAndYield(['a:1', 'b:1', 'c:1']);
+    expect(Scheduler).toHaveYielded(['a:1', 'b:1', 'c:1']);
 
     expect(ReactNoop.getChildrenAsJSX('a')).toEqual('a:1');
     expect(ReactNoop.getChildrenAsJSX('b')).toEqual('b:1');
@@ -114,27 +114,27 @@ describe('ReactIncrementalScheduling', () => {
     ReactNoop.act(() => {
       ReactNoop.renderToRootWithID(<Text text="c:2" />, 'c');
       ReactNoop.renderToRootWithID(<Text text="b:2" />, 'b');
-    });
-    // Ensure it starts in the order it was scheduled
-    expect(Scheduler).toFlushAndYieldThrough(['c:2']);
+      // Ensure it starts in the order it was scheduled
+      expect(Scheduler).toFlushAndYieldThrough(['c:2']);
 
-    expect(ReactNoop.getChildrenAsJSX('a')).toEqual('a:1');
-    expect(ReactNoop.getChildrenAsJSX('b')).toEqual('b:1');
-    expect(ReactNoop.getChildrenAsJSX('c')).toEqual('c:2');
-    // Schedule last bit of work, it will get processed the last
-    ReactNoop.act(() => {
+      expect(ReactNoop.getChildrenAsJSX('a')).toEqual('a:1');
+      expect(ReactNoop.getChildrenAsJSX('b')).toEqual('b:1');
+      expect(ReactNoop.getChildrenAsJSX('c')).toEqual('c:2');
+      // Schedule last bit of work, it will get processed the last
+
       ReactNoop.renderToRootWithID(<Text text="a:2" />, 'a');
-    });
-    // Keep performing work in the order it was scheduled
-    expect(Scheduler).toFlushAndYieldThrough(['b:2']);
-    expect(ReactNoop.getChildrenAsJSX('a')).toEqual('a:1');
-    expect(ReactNoop.getChildrenAsJSX('b')).toEqual('b:2');
-    expect(ReactNoop.getChildrenAsJSX('c')).toEqual('c:2');
 
-    expect(Scheduler).toFlushAndYieldThrough(['a:2']);
-    expect(ReactNoop.getChildrenAsJSX('a')).toEqual('a:2');
-    expect(ReactNoop.getChildrenAsJSX('b')).toEqual('b:2');
-    expect(ReactNoop.getChildrenAsJSX('c')).toEqual('c:2');
+      // Keep performing work in the order it was scheduled
+      expect(Scheduler).toFlushAndYieldThrough(['b:2']);
+      expect(ReactNoop.getChildrenAsJSX('a')).toEqual('a:1');
+      expect(ReactNoop.getChildrenAsJSX('b')).toEqual('b:2');
+      expect(ReactNoop.getChildrenAsJSX('c')).toEqual('c:2');
+
+      expect(Scheduler).toFlushAndYieldThrough(['a:2']);
+      expect(ReactNoop.getChildrenAsJSX('a')).toEqual('a:2');
+      expect(ReactNoop.getChildrenAsJSX('b')).toEqual('b:2');
+      expect(ReactNoop.getChildrenAsJSX('c')).toEqual('c:2');
+    });
   });
 
   it('schedules sync updates when inside componentDidMount/Update', () => {
@@ -144,24 +144,24 @@ describe('ReactIncrementalScheduling', () => {
       state = {tick: 0};
 
       componentDidMount() {
-        Scheduler.yieldValue(
+        Scheduler.unstable_yieldValue(
           'componentDidMount (before setState): ' + this.state.tick,
         );
         this.setState({tick: 1});
         // We're in a batch. Update hasn't flushed yet.
-        Scheduler.yieldValue(
+        Scheduler.unstable_yieldValue(
           'componentDidMount (after setState): ' + this.state.tick,
         );
       }
 
       componentDidUpdate() {
-        Scheduler.yieldValue('componentDidUpdate: ' + this.state.tick);
+        Scheduler.unstable_yieldValue('componentDidUpdate: ' + this.state.tick);
         if (this.state.tick === 2) {
-          Scheduler.yieldValue(
+          Scheduler.unstable_yieldValue(
             'componentDidUpdate (before setState): ' + this.state.tick,
           );
           this.setState({tick: 3});
-          Scheduler.yieldValue(
+          Scheduler.unstable_yieldValue(
             'componentDidUpdate (after setState): ' + this.state.tick,
           );
           // We're in a batch. Update hasn't flushed yet.
@@ -169,7 +169,7 @@ describe('ReactIncrementalScheduling', () => {
       }
 
       render() {
-        Scheduler.yieldValue('render: ' + this.state.tick);
+        Scheduler.unstable_yieldValue('render: ' + this.state.tick);
         instance = this;
         return <span prop={this.state.tick} />;
       }
@@ -209,11 +209,11 @@ describe('ReactIncrementalScheduling', () => {
 
       componentDidMount() {
         ReactNoop.deferredUpdates(() => {
-          Scheduler.yieldValue(
+          Scheduler.unstable_yieldValue(
             'componentDidMount (before setState): ' + this.state.tick,
           );
           this.setState({tick: 1});
-          Scheduler.yieldValue(
+          Scheduler.unstable_yieldValue(
             'componentDidMount (after setState): ' + this.state.tick,
           );
         });
@@ -221,13 +221,15 @@ describe('ReactIncrementalScheduling', () => {
 
       componentDidUpdate() {
         ReactNoop.deferredUpdates(() => {
-          Scheduler.yieldValue('componentDidUpdate: ' + this.state.tick);
+          Scheduler.unstable_yieldValue(
+            'componentDidUpdate: ' + this.state.tick,
+          );
           if (this.state.tick === 2) {
-            Scheduler.yieldValue(
+            Scheduler.unstable_yieldValue(
               'componentDidUpdate (before setState): ' + this.state.tick,
             );
             this.setState({tick: 3});
-            Scheduler.yieldValue(
+            Scheduler.unstable_yieldValue(
               'componentDidUpdate (after setState): ' + this.state.tick,
             );
           }
@@ -235,7 +237,7 @@ describe('ReactIncrementalScheduling', () => {
       }
 
       render() {
-        Scheduler.yieldValue('render: ' + this.state.tick);
+        Scheduler.unstable_yieldValue('render: ' + this.state.tick);
         instance = this;
         return <span prop={this.state.tick} />;
       }
@@ -285,7 +287,7 @@ describe('ReactIncrementalScheduling', () => {
         });
       }
       render() {
-        Scheduler.yieldValue('Foo');
+        Scheduler.unstable_yieldValue('Foo');
         return <span prop={this.state.step} />;
       }
     }

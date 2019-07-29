@@ -6,4 +6,10 @@
  *
  */
 
-export const enableSchedulerDebugging = true;
+export const {
+  enableIsInputPending,
+  enableSchedulerDebugging,
+  requestIdleCallbackBeforeFirstFrame,
+  requestTimerEventBeforeFirstFrame,
+  enableMessageLoopImplementation,
+} = require('SchedulerFeatureFlags');

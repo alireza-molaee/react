@@ -39,9 +39,10 @@ describe('ReactNoop.act()', () => {
     function App() {
       let [ctr, setCtr] = React.useState(0);
       async function someAsyncFunction() {
-        Scheduler.yieldValue('stage 1');
+        Scheduler.unstable_yieldValue('stage 1');
         await null;
-        Scheduler.yieldValue('stage 2');
+        Scheduler.unstable_yieldValue('stage 2');
+        await null;
         setCtr(1);
       }
       React.useEffect(() => {
@@ -50,13 +51,9 @@ describe('ReactNoop.act()', () => {
       return ctr;
     }
     await ReactNoop.act(async () => {
-      ReactNoop.act(() => {
-        ReactNoop.render(<App />);
-      });
-      await null;
-      expect(Scheduler).toFlushAndYield(['stage 1']);
+      ReactNoop.render(<App />);
     });
-    expect(Scheduler).toHaveYielded(['stage 2']);
+    expect(Scheduler).toHaveYielded(['stage 1', 'stage 2']);
     expect(Scheduler).toFlushWithoutYielding();
     expect(ReactNoop.getChildren()).toEqual([{text: '1', hidden: false}]);
   });

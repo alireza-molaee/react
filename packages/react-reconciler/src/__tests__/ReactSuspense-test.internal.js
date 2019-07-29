@@ -40,12 +40,12 @@ describe('ReactSuspense', () => {
                 listeners = [{resolve, reject}];
                 setTimeout(() => {
                   if (textResourceShouldFail) {
-                    Scheduler.yieldValue(`Promise rejected [${text}]`);
+                    Scheduler.unstable_yieldValue(`Promise rejected [${text}]`);
                     status = 'rejected';
                     value = new Error('Failed to load: ' + text);
                     listeners.forEach(listener => listener.reject(value));
                   } else {
-                    Scheduler.yieldValue(`Promise resolved [${text}]`);
+                    Scheduler.unstable_yieldValue(`Promise resolved [${text}]`);
                     status = 'resolved';
                     value = text;
                     listeners.forEach(listener => listener.resolve(value));
@@ -72,7 +72,7 @@ describe('ReactSuspense', () => {
   });
 
   function Text(props) {
-    Scheduler.yieldValue(props.text);
+    Scheduler.unstable_yieldValue(props.text);
     return props.text;
   }
 
@@ -80,13 +80,13 @@ describe('ReactSuspense', () => {
     const text = props.text;
     try {
       TextResource.read([props.text, props.ms]);
-      Scheduler.yieldValue(text);
+      Scheduler.unstable_yieldValue(text);
       return text;
     } catch (promise) {
       if (typeof promise.then === 'function') {
-        Scheduler.yieldValue(`Suspend! [${text}]`);
+        Scheduler.unstable_yieldValue(`Suspend! [${text}]`);
       } else {
-        Scheduler.yieldValue(`Error! [${text}]`);
+        Scheduler.unstable_yieldValue(`Error! [${text}]`);
       }
       throw promise;
     }
@@ -94,25 +94,35 @@ describe('ReactSuspense', () => {
 
   it('suspends rendering and continues later', () => {
     function Bar(props) {
-      Scheduler.yieldValue('Bar');
+      Scheduler.unstable_yieldValue('Bar');
       return props.children;
     }
 
-    function Foo() {
-      Scheduler.yieldValue('Foo');
+    function Foo({renderBar}) {
+      Scheduler.unstable_yieldValue('Foo');
       return (
         <Suspense fallback={<Text text="Loading..." />}>
-          <Bar>
-            <AsyncText text="A" ms={100} />
-            <Text text="B" />
-          </Bar>
+          {renderBar ? (
+            <Bar>
+              <AsyncText text="A" ms={100} />
+              <Text text="B" />
+            </Bar>
+          ) : null}
         </Suspense>
       );
     }
 
+    // Render an empty shell
     const root = ReactTestRenderer.create(<Foo />, {
       unstable_isConcurrent: true,
     });
+
+    expect(Scheduler).toFlushAndYield(['Foo']);
+    expect(root).toMatchRenderedOutput(null);
+
+    // Navigate the shell to now render the child content.
+    // This should suspend.
+    root.update(<Foo renderBar={true} />);
 
     expect(Scheduler).toFlushAndYield([
       'Foo',
@@ -161,17 +171,12 @@ describe('ReactSuspense', () => {
       'Suspend! [B]',
       'Loading B...',
     ]);
-    expect(root).toMatchRenderedOutput(null);
-
-    // Advance time by enough to timeout both components and commit their placeholders
-    jest.advanceTimersByTime(4000);
-    expect(Scheduler).toFlushWithoutYielding();
     expect(root).toMatchRenderedOutput('Loading A...Loading B...');
 
     // Advance time by enough that the first Suspense's promise resolves and
     // switches back to the normal view. The second Suspense should still
     // show the placeholder
-    jest.advanceTimersByTime(1000);
+    jest.advanceTimersByTime(5000);
     // TODO: Should we throw if you forget to call toHaveYielded?
     expect(Scheduler).toHaveYielded(['Promise resolved [A]']);
     expect(Scheduler).toFlushAndYield(['A']);
@@ -206,45 +211,65 @@ describe('ReactSuspense', () => {
 
     function Async() {
       if (!didResolve) {
-        Scheduler.yieldValue('Suspend!');
+        Scheduler.unstable_yieldValue('Suspend!');
         throw thenable;
       }
-      Scheduler.yieldValue('Async');
+      Scheduler.unstable_yieldValue('Async');
       return 'Async';
     }
 
     const root = ReactTestRenderer.create(
-      <Suspense fallback={<Text text="Loading..." />}>
-        <Async />
-        <Text text="Sibling" />
-      </Suspense>,
+      <React.Fragment>
+        <Suspense fallback={<Text text="Loading..." />} />
+        <Text text="Initial" />
+      </React.Fragment>,
       {
         unstable_isConcurrent: true,
       },
     );
+    expect(Scheduler).toFlushAndYield(['Initial']);
+    expect(root).toMatchRenderedOutput('Initial');
 
-    expect(Scheduler).toFlushAndYieldThrough(['Suspend!']);
+    // The update will suspend.
+    root.update(
+      <React.Fragment>
+        <Suspense fallback={<Text text="Loading..." />}>
+          <Async />
+        </Suspense>
+        <Text text="After Suspense" />
+        <Text text="Sibling" />
+      </React.Fragment>,
+    );
+
+    // Yield past the Suspense boundary but don't complete the last sibling.
+    expect(Scheduler).toFlushAndYieldThrough([
+      'Suspend!',
+      'Loading...',
+      'After Suspense',
+    ]);
 
     // The promise resolves before the current render phase has completed
     resolveThenable();
     expect(Scheduler).toHaveYielded([]);
+    expect(root).toMatchRenderedOutput('Initial');
 
     // Start over from the root, instead of continuing.
     expect(Scheduler).toFlushAndYield([
       // Async renders again *before* Sibling
       'Async',
+      'After Suspense',
       'Sibling',
     ]);
-    expect(root).toMatchRenderedOutput('AsyncSibling');
+    expect(root).toMatchRenderedOutput('AsyncAfter SuspenseSibling');
   });
 
   it('mounts a lazy class component in non-concurrent mode', async () => {
     class Class extends React.Component {
       componentDidMount() {
-        Scheduler.yieldValue('Did mount: ' + this.props.label);
+        Scheduler.unstable_yieldValue('Did mount: ' + this.props.label);
       }
       componentDidUpdate() {
-        Scheduler.yieldValue('Did update: ' + this.props.label);
+        Scheduler.unstable_yieldValue('Did update: ' + this.props.label);
       }
       render() {
         return <Text text={this.props.label} />;
@@ -302,6 +327,7 @@ describe('ReactSuspense', () => {
   });
 
   it('throws if tree suspends and none of the Suspense ancestors have a fallback', () => {
+    spyOnDev(console, 'error');
     ReactTestRenderer.create(
       <Suspense>
         <AsyncText text="Hi" ms={1000} />
@@ -315,19 +341,29 @@ describe('ReactSuspense', () => {
       'AsyncText suspended while rendering, but no fallback UI was specified.',
     );
     expect(Scheduler).toHaveYielded(['Suspend! [Hi]', 'Suspend! [Hi]']);
+    if (__DEV__) {
+      expect(console.error).toHaveBeenCalledTimes(2);
+      expect(console.error.calls.argsFor(0)[0]).toContain(
+        'Warning: %s\n\nThe fix is to split the update',
+      );
+      expect(console.error.calls.argsFor(0)[1]).toContain(
+        'A user-blocking update was suspended by:',
+      );
+      expect(console.error.calls.argsFor(0)[1]).toContain('AsyncText');
+    }
   });
 
   describe('outside concurrent mode', () => {
     it('a mounted class component can suspend without losing state', () => {
       class TextWithLifecycle extends React.Component {
         componentDidMount() {
-          Scheduler.yieldValue(`Mount [${this.props.text}]`);
+          Scheduler.unstable_yieldValue(`Mount [${this.props.text}]`);
         }
         componentDidUpdate() {
-          Scheduler.yieldValue(`Update [${this.props.text}]`);
+          Scheduler.unstable_yieldValue(`Update [${this.props.text}]`);
         }
         componentWillUnmount() {
-          Scheduler.yieldValue(`Unmount [${this.props.text}]`);
+          Scheduler.unstable_yieldValue(`Unmount [${this.props.text}]`);
         }
         render() {
           return <Text {...this.props} />;
@@ -338,15 +374,17 @@ describe('ReactSuspense', () => {
       class AsyncTextWithLifecycle extends React.Component {
         state = {step: 1};
         componentDidMount() {
-          Scheduler.yieldValue(`Mount [${this.props.text}:${this.state.step}]`);
+          Scheduler.unstable_yieldValue(
+            `Mount [${this.props.text}:${this.state.step}]`,
+          );
         }
         componentDidUpdate() {
-          Scheduler.yieldValue(
+          Scheduler.unstable_yieldValue(
             `Update [${this.props.text}:${this.state.step}]`,
           );
         }
         componentWillUnmount() {
-          Scheduler.yieldValue(
+          Scheduler.unstable_yieldValue(
             `Unmount [${this.props.text}:${this.state.step}]`,
           );
         }
@@ -356,13 +394,13 @@ describe('ReactSuspense', () => {
           const ms = this.props.ms;
           try {
             TextResource.read([text, ms]);
-            Scheduler.yieldValue(text);
+            Scheduler.unstable_yieldValue(text);
             return text;
           } catch (promise) {
             if (typeof promise.then === 'function') {
-              Scheduler.yieldValue(`Suspend! [${text}]`);
+              Scheduler.unstable_yieldValue(`Suspend! [${text}]`);
             } else {
-              Scheduler.yieldValue(`Error! [${text}]`);
+              Scheduler.unstable_yieldValue(`Error! [${text}]`);
             }
             throw promise;
           }
@@ -547,20 +585,20 @@ describe('ReactSuspense', () => {
     it('suspends in a class that has componentWillUnmount and is then deleted', () => {
       class AsyncTextWithUnmount extends React.Component {
         componentWillUnmount() {
-          Scheduler.yieldValue('will unmount');
+          Scheduler.unstable_yieldValue('will unmount');
         }
         render() {
           const text = this.props.text;
           const ms = this.props.ms;
           try {
             TextResource.read([text, ms]);
-            Scheduler.yieldValue(text);
+            Scheduler.unstable_yieldValue(text);
             return text;
           } catch (promise) {
             if (typeof promise.then === 'function') {
-              Scheduler.yieldValue(`Suspend! [${text}]`);
+              Scheduler.unstable_yieldValue(`Suspend! [${text}]`);
             } else {
-              Scheduler.yieldValue(`Error! [${text}]`);
+              Scheduler.unstable_yieldValue(`Error! [${text}]`);
             }
             throw promise;
           }
@@ -591,20 +629,20 @@ describe('ReactSuspense', () => {
 
         useLayoutEffect(
           () => {
-            Scheduler.yieldValue('Did commit: ' + text);
+            Scheduler.unstable_yieldValue('Did commit: ' + text);
           },
           [text],
         );
 
         try {
           TextResource.read([props.text, props.ms]);
-          Scheduler.yieldValue(text);
+          Scheduler.unstable_yieldValue(text);
           return text;
         } catch (promise) {
           if (typeof promise.then === 'function') {
-            Scheduler.yieldValue(`Suspend! [${text}]`);
+            Scheduler.unstable_yieldValue(`Suspend! [${text}]`);
           } else {
-            Scheduler.yieldValue(`Error! [${text}]`);
+            Scheduler.unstable_yieldValue(`Error! [${text}]`);
           }
           throw promise;
         }
@@ -827,13 +865,13 @@ describe('ReactSuspense', () => {
         const fullText = `${text}:${step}`;
         try {
           TextResource.read([fullText, ms]);
-          Scheduler.yieldValue(fullText);
+          Scheduler.unstable_yieldValue(fullText);
           return fullText;
         } catch (promise) {
           if (typeof promise.then === 'function') {
-            Scheduler.yieldValue(`Suspend! [${fullText}]`);
+            Scheduler.unstable_yieldValue(`Suspend! [${fullText}]`);
           } else {
-            Scheduler.yieldValue(`Error! [${fullText}]`);
+            Scheduler.unstable_yieldValue(`Error! [${fullText}]`);
           }
           throw promise;
         }

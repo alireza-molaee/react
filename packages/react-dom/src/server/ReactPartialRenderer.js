@@ -22,7 +22,8 @@ import ReactSharedInternals from 'shared/ReactSharedInternals';
 import {
   warnAboutDeprecatedLifecycles,
   enableSuspenseServerRenderer,
-  enableEventAPI,
+  enableFundamentalAPI,
+  enableFlareAPI,
 } from 'shared/ReactFeatureFlags';
 
 import {
@@ -31,15 +32,14 @@ import {
   REACT_STRICT_MODE_TYPE,
   REACT_CONCURRENT_MODE_TYPE,
   REACT_SUSPENSE_TYPE,
+  REACT_SUSPENSE_LIST_TYPE,
   REACT_PORTAL_TYPE,
   REACT_PROFILER_TYPE,
   REACT_PROVIDER_TYPE,
   REACT_CONTEXT_TYPE,
   REACT_LAZY_TYPE,
   REACT_MEMO_TYPE,
-  REACT_EVENT_COMPONENT_TYPE,
-  REACT_EVENT_TARGET_TYPE,
-  REACT_EVENT_TARGET_TOUCH_HIT,
+  REACT_FUNDAMENTAL_TYPE,
 } from 'shared/ReactSymbols';
 
 import {
@@ -231,7 +231,10 @@ function createMarkupForStyles(styles): string | null {
       }
     }
     if (styleValue != null) {
-      serialized += delimiter + processStyleName(styleName) + ':';
+      serialized +=
+        delimiter +
+        (isCustomProperty ? styleName : processStyleName(styleName)) +
+        ':';
       serialized += dangerousStyleValue(
         styleName,
         styleValue,
@@ -355,6 +358,9 @@ function createOpenTagMarkup(
 
   for (const propKey in props) {
     if (!hasOwnProperty.call(props, propKey)) {
+      continue;
+    }
+    if (enableFlareAPI && propKey === 'responders') {
       continue;
     }
     let propValue = props[propKey];
@@ -573,13 +579,12 @@ function resolve(
             if (!didWarnAboutDeprecatedWillMount[componentName]) {
               lowPriorityWarning(
                 false,
-                '%s: componentWillMount() is deprecated and will be ' +
-                  'removed in the next major version. Read about the motivations ' +
-                  'behind this change: ' +
-                  'https://fb.me/react-async-component-lifecycle-hooks' +
-                  '\n\n' +
-                  'As a temporary workaround, you can rename to ' +
-                  'UNSAFE_componentWillMount instead.',
+                // keep this warning in sync with ReactStrictModeWarning.js
+                'componentWillMount has been renamed, and is not recommended for use. ' +
+                  'See https://fb.me/react-async-component-lifecycle-hooks for details.\n\n' +
+                  '* Move code from componentWillMount to componentDidMount (preferred in most cases) ' +
+                  'or the constructor.\n' +
+                  '\nPlease update the following components: %s',
                 componentName,
               );
               didWarnAboutDeprecatedWillMount[componentName] = true;
@@ -970,6 +975,7 @@ class ReactDOMServerRenderer {
         case REACT_STRICT_MODE_TYPE:
         case REACT_CONCURRENT_MODE_TYPE:
         case REACT_PROFILER_TYPE:
+        case REACT_SUSPENSE_LIST_TYPE:
         case REACT_FRAGMENT_TYPE: {
           const nextChildren = toArray(
             ((nextChild: any): ReactElement).props.children,
@@ -1166,52 +1172,41 @@ class ReactDOMServerRenderer {
             this.stack.push(frame);
             return '';
           }
-          case REACT_EVENT_COMPONENT_TYPE:
-          case REACT_EVENT_TARGET_TYPE: {
-            if (enableEventAPI) {
-              if (
-                elementType.$$typeof === REACT_EVENT_TARGET_TYPE &&
-                elementType.type === REACT_EVENT_TARGET_TOUCH_HIT
-              ) {
-                const props = nextElement.props;
-                const bottom = props.bottom || 0;
-                const left = props.left || 0;
-                const right = props.right || 0;
-                const top = props.top || 0;
-
-                if (bottom === 0 && left === 0 && right === 0 && top === 0) {
-                  return '';
-                }
-                let topString = top ? `-${top}px` : '0px';
-                let leftString = left ? `-${left}px` : '0px';
-                let rightString = right ? `-${right}px` : '0x';
-                let bottomString = bottom ? `-${bottom}px` : '0px';
-
-                return (
-                  `<div style="position:absolute;pointer-events:none;z-index:-1;bottom:` +
-                  `${bottomString};left:${leftString};right:${rightString};top:${topString}"></div>`
-                );
-              }
-              const nextChildren = toArray(
-                ((nextChild: any): ReactElement).props.children,
+          // eslint-disable-next-line-no-fallthrough
+          case REACT_FUNDAMENTAL_TYPE: {
+            if (enableFundamentalAPI) {
+              const fundamentalImpl = elementType.impl;
+              const open = fundamentalImpl.getServerSideString(
+                null,
+                nextElement.props,
               );
+              const getServerSideStringClose =
+                fundamentalImpl.getServerSideStringClose;
+              const close =
+                getServerSideStringClose !== undefined
+                  ? getServerSideStringClose(null, nextElement.props)
+                  : '';
+              const nextChildren =
+                fundamentalImpl.reconcileChildren !== false
+                  ? toArray(((nextChild: any): ReactElement).props.children)
+                  : [];
               const frame: Frame = {
                 type: null,
                 domNamespace: parentNamespace,
                 children: nextChildren,
                 childIndex: 0,
                 context: context,
-                footer: '',
+                footer: close,
               };
               if (__DEV__) {
                 ((frame: any): FrameDev).debugElementStack = [];
               }
               this.stack.push(frame);
-              return '';
+              return open;
             }
             invariant(
               false,
-              'ReactDOMServer does not yet support the event API.',
+              'ReactDOMServer does not yet support the fundamental API.',
             );
           }
           // eslint-disable-next-line-no-fallthrough

@@ -21,14 +21,16 @@ import type {ExpirationTime} from './ReactFiberExpirationTime';
 import type {CapturedValue, CapturedError} from './ReactCapturedValue';
 import type {SuspenseState} from './ReactFiberSuspenseComponent';
 import type {FunctionComponentUpdateQueue} from './ReactFiberHooks';
-import type {Thenable} from './ReactFiberScheduler';
+import type {Thenable} from './ReactFiberWorkLoop';
 
 import {unstable_wrap as Schedule_tracing_wrap} from 'scheduler/tracing';
 import {
   enableSchedulerTracing,
   enableProfilerTimer,
   enableSuspenseServerRenderer,
-  enableEventAPI,
+  enableFlareAPI,
+  enableFundamentalAPI,
+  enableSuspenseCallback,
 } from 'shared/ReactFeatureFlags';
 import {
   FunctionComponent,
@@ -44,8 +46,8 @@ import {
   IncompleteClassComponent,
   MemoComponent,
   SimpleMemoComponent,
-  EventComponent,
-  EventTarget,
+  SuspenseListComponent,
+  FundamentalComponent,
 } from 'shared/ReactWorkTags';
 import {
   invokeGuardedCallback,
@@ -53,20 +55,18 @@ import {
   clearCaughtError,
 } from 'shared/ReactErrorUtils';
 import {
+  NoEffect,
   ContentReset,
   Placement,
   Snapshot,
   Update,
+  Passive,
 } from 'shared/ReactSideEffectTags';
 import getComponentName from 'shared/getComponentName';
 import invariant from 'shared/invariant';
 import warningWithoutStack from 'shared/warningWithoutStack';
 import warning from 'shared/warning';
 
-import {
-  NoWork,
-  computeAsyncExpirationNoBucket,
-} from './ReactFiberExpirationTime';
 import {onCommitUnmount} from './ReactFiberDevToolsHook';
 import {startPhaseTimer, stopPhaseTimer} from './ReactDebugFiberPerf';
 import {getStackByFiberInDevAndProd} from './ReactCurrentFiber';
@@ -96,15 +96,15 @@ import {
   hideTextInstance,
   unhideInstance,
   unhideTextInstance,
-  unmountEventComponent,
-  commitEventTarget,
-  mountEventComponent,
+  unmountResponderInstance,
+  unmountFundamentalComponent,
+  updateFundamentalComponent,
 } from './ReactFiberHostConfig';
 import {
   captureCommitPhaseError,
-  requestCurrentTime,
   resolveRetryThenable,
-} from './ReactFiberScheduler';
+  markCommitTimeOfFallback,
+} from './ReactFiberWorkLoop';
 import {
   NoEffect as NoHookEffect,
   UnmountSnapshot,
@@ -308,7 +308,6 @@ function commitBeforeMutationLifeCycles(
     case HostText:
     case HostPortal:
     case IncompleteClassComponent:
-    case EventTarget:
       // Nothing to do for these component types
       return;
     default: {
@@ -386,8 +385,19 @@ function commitHookEffectList(
 }
 
 export function commitPassiveHookEffects(finishedWork: Fiber): void {
-  commitHookEffectList(UnmountPassive, NoHookEffect, finishedWork);
-  commitHookEffectList(NoHookEffect, MountPassive, finishedWork);
+  if ((finishedWork.effectTag & Passive) !== NoEffect) {
+    switch (finishedWork.tag) {
+      case FunctionComponent:
+      case ForwardRef:
+      case SimpleMemoComponent: {
+        commitHookEffectList(UnmountPassive, NoHookEffect, finishedWork);
+        commitHookEffectList(NoHookEffect, MountPassive, finishedWork);
+        break;
+      }
+      default:
+        break;
+    }
+  }
 }
 
 function commitLifeCycles(
@@ -570,66 +580,36 @@ function commitLifeCycles(
       if (enableProfilerTimer) {
         const onRender = finishedWork.memoizedProps.onRender;
 
-        if (enableSchedulerTracing) {
-          onRender(
-            finishedWork.memoizedProps.id,
-            current === null ? 'mount' : 'update',
-            finishedWork.actualDuration,
-            finishedWork.treeBaseDuration,
-            finishedWork.actualStartTime,
-            getCommitTime(),
-            finishedRoot.memoizedInteractions,
-          );
-        } else {
-          onRender(
-            finishedWork.memoizedProps.id,
-            current === null ? 'mount' : 'update',
-            finishedWork.actualDuration,
-            finishedWork.treeBaseDuration,
-            finishedWork.actualStartTime,
-            getCommitTime(),
-          );
+        if (typeof onRender === 'function') {
+          if (enableSchedulerTracing) {
+            onRender(
+              finishedWork.memoizedProps.id,
+              current === null ? 'mount' : 'update',
+              finishedWork.actualDuration,
+              finishedWork.treeBaseDuration,
+              finishedWork.actualStartTime,
+              getCommitTime(),
+              finishedRoot.memoizedInteractions,
+            );
+          } else {
+            onRender(
+              finishedWork.memoizedProps.id,
+              current === null ? 'mount' : 'update',
+              finishedWork.actualDuration,
+              finishedWork.treeBaseDuration,
+              finishedWork.actualStartTime,
+              getCommitTime(),
+            );
+          }
         }
       }
       return;
     }
     case SuspenseComponent:
+    case SuspenseListComponent:
     case IncompleteClassComponent:
+    case FundamentalComponent:
       return;
-    case EventTarget: {
-      if (enableEventAPI) {
-        const type = finishedWork.type.type;
-        const props = finishedWork.memoizedProps;
-        const instance = finishedWork.stateNode;
-        let parentInstance = null;
-
-        let node = finishedWork.return;
-        // Traverse up the fiber tree until we find the parent host node.
-        while (node !== null) {
-          if (node.tag === HostComponent) {
-            parentInstance = node.stateNode;
-            break;
-          } else if (node.tag === HostRoot) {
-            parentInstance = node.stateNode.containerInfo;
-            break;
-          }
-          node = node.return;
-        }
-        invariant(
-          parentInstance !== null,
-          'This should have a parent host component initialized. This error is likely ' +
-            'caused by a bug in React. Please file an issue.',
-        );
-        commitEventTarget(type, props, instance, parentInstance);
-      }
-      return;
-    }
-    case EventComponent: {
-      if (enableEventAPI) {
-        mountEventComponent(finishedWork.stateNode);
-      }
-      return;
-    }
     default: {
       invariant(
         false,
@@ -770,6 +750,25 @@ function commitUnmount(current: Fiber): void {
       return;
     }
     case HostComponent: {
+      if (enableFlareAPI) {
+        const dependencies = current.dependencies;
+
+        if (dependencies !== null) {
+          const respondersMap = dependencies.responders;
+          if (respondersMap !== null) {
+            const responderInstances = Array.from(respondersMap.values());
+            for (
+              let i = 0, length = responderInstances.length;
+              i < length;
+              i++
+            ) {
+              const responderInstance = responderInstances[i];
+              unmountResponderInstance(responderInstance);
+            }
+            dependencies.responders = null;
+          }
+        }
+      }
       safelyDetachRef(current);
       return;
     }
@@ -784,11 +783,13 @@ function commitUnmount(current: Fiber): void {
       }
       return;
     }
-    case EventComponent: {
-      if (enableEventAPI) {
-        const eventComponentInstance = current.stateNode;
-        unmountEventComponent(eventComponentInstance);
-        current.stateNode = null;
+    case FundamentalComponent: {
+      if (enableFundamentalAPI) {
+        const fundamentalInstance = current.stateNode;
+        if (fundamentalInstance !== null) {
+          unmountFundamentalComponent(fundamentalInstance);
+          current.stateNode = null;
+        }
       }
     }
   }
@@ -839,12 +840,14 @@ function detachFiber(current: Fiber) {
   current.child = null;
   current.memoizedState = null;
   current.updateQueue = null;
+  current.dependencies = null;
   const alternate = current.alternate;
   if (alternate !== null) {
     alternate.return = null;
     alternate.child = null;
     alternate.memoizedState = null;
     alternate.updateQueue = null;
+    alternate.dependencies = null;
   }
 }
 
@@ -869,8 +872,7 @@ function commitContainer(finishedWork: Fiber) {
     case ClassComponent:
     case HostComponent:
     case HostText:
-    case EventTarget:
-    case EventComponent: {
+    case FundamentalComponent: {
       return;
     }
     case HostRoot:
@@ -974,20 +976,26 @@ function commitPlacement(finishedWork: Fiber): void {
   // Note: these two variables *must* always be updated together.
   let parent;
   let isContainer;
-
+  const parentStateNode = parentFiber.stateNode;
   switch (parentFiber.tag) {
     case HostComponent:
-      parent = parentFiber.stateNode;
+      parent = parentStateNode;
       isContainer = false;
       break;
     case HostRoot:
-      parent = parentFiber.stateNode.containerInfo;
+      parent = parentStateNode.containerInfo;
       isContainer = true;
       break;
     case HostPortal:
-      parent = parentFiber.stateNode.containerInfo;
+      parent = parentStateNode.containerInfo;
       isContainer = true;
       break;
+    case FundamentalComponent:
+      if (enableFundamentalAPI) {
+        parent = parentStateNode.instance;
+        isContainer = false;
+      }
+    // eslint-disable-next-line-no-fallthrough
     default:
       invariant(
         false,
@@ -1007,8 +1015,9 @@ function commitPlacement(finishedWork: Fiber): void {
   // children to find all the terminal nodes.
   let node: Fiber = finishedWork;
   while (true) {
-    if (node.tag === HostComponent || node.tag === HostText) {
-      const stateNode = node.stateNode;
+    const isHost = node.tag === HostComponent || node.tag === HostText;
+    if (isHost || node.tag === FundamentalComponent) {
+      const stateNode = isHost ? node.stateNode : node.stateNode.instance;
       if (before) {
         if (isContainer) {
           insertInContainerBefore(parent, stateNode, before);
@@ -1067,19 +1076,25 @@ function unmountHostComponents(current): void {
           'Expected to find a host parent. This error is likely caused by ' +
             'a bug in React. Please file an issue.',
         );
+        const parentStateNode = parent.stateNode;
         switch (parent.tag) {
           case HostComponent:
-            currentParent = parent.stateNode;
+            currentParent = parentStateNode;
             currentParentIsContainer = false;
             break findParent;
           case HostRoot:
-            currentParent = parent.stateNode.containerInfo;
+            currentParent = parentStateNode.containerInfo;
             currentParentIsContainer = true;
             break findParent;
           case HostPortal:
-            currentParent = parent.stateNode.containerInfo;
+            currentParent = parentStateNode.containerInfo;
             currentParentIsContainer = true;
             break findParent;
+          case FundamentalComponent:
+            if (enableFundamentalAPI) {
+              currentParent = parentStateNode.instance;
+              currentParentIsContainer = false;
+            }
         }
         parent = parent.return;
       }
@@ -1102,6 +1117,22 @@ function unmountHostComponents(current): void {
         );
       }
       // Don't visit children because we already visited them.
+    } else if (node.tag === FundamentalComponent) {
+      const fundamentalNode = node.stateNode.instance;
+      commitNestedUnmounts(node);
+      // After all the children have unmounted, it is now safe to remove the
+      // node from the tree.
+      if (currentParentIsContainer) {
+        removeChildFromContainer(
+          ((currentParent: any): Container),
+          (fundamentalNode: Instance),
+        );
+      } else {
+        removeChild(
+          ((currentParent: any): Instance),
+          (fundamentalNode: Instance),
+        );
+      }
     } else if (
       enableSuspenseServerRenderer &&
       node.tag === DehydratedSuspenseComponent
@@ -1186,6 +1217,11 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
       }
       case SuspenseComponent: {
         commitSuspenseComponent(finishedWork);
+        attachSuspenseRetryListeners(finishedWork);
+        return;
+      }
+      case SuspenseListComponent: {
+        attachSuspenseRetryListeners(finishedWork);
         return;
       }
     }
@@ -1249,9 +1285,6 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
       commitTextUpdate(textInstance, oldText, newText);
       return;
     }
-    case EventTarget: {
-      return;
-    }
     case HostRoot: {
       return;
     }
@@ -1260,12 +1293,21 @@ function commitWork(current: Fiber | null, finishedWork: Fiber): void {
     }
     case SuspenseComponent: {
       commitSuspenseComponent(finishedWork);
+      attachSuspenseRetryListeners(finishedWork);
+      return;
+    }
+    case SuspenseListComponent: {
+      attachSuspenseRetryListeners(finishedWork);
       return;
     }
     case IncompleteClassComponent: {
       return;
     }
-    case EventComponent: {
+    case FundamentalComponent: {
+      if (enableFundamentalAPI) {
+        const fundamentalInstance = finishedWork.stateNode;
+        updateFundamentalComponent(fundamentalInstance);
+      }
       return;
     }
     default: {
@@ -1288,22 +1330,29 @@ function commitSuspenseComponent(finishedWork: Fiber) {
   } else {
     newDidTimeout = true;
     primaryChildParent = finishedWork.child;
-    if (newState.fallbackExpirationTime === NoWork) {
-      // If the children had not already timed out, record the time.
-      // This is used to compute the elapsed time during subsequent
-      // attempts to render the children.
-      // We model this as a normal pri expiration time since that's
-      // how we infer start time for updates.
-      newState.fallbackExpirationTime = computeAsyncExpirationNoBucket(
-        requestCurrentTime(),
-      );
-    }
+    markCommitTimeOfFallback();
   }
 
   if (supportsMutation && primaryChildParent !== null) {
     hideOrUnhideAllChildren(primaryChildParent, newDidTimeout);
   }
 
+  if (enableSuspenseCallback && newState !== null) {
+    const suspenseCallback = finishedWork.memoizedProps.suspenseCallback;
+    if (typeof suspenseCallback === 'function') {
+      const thenables: Set<Thenable> | null = (finishedWork.updateQueue: any);
+      if (thenables !== null) {
+        suspenseCallback(new Set(thenables));
+      }
+    } else if (__DEV__) {
+      if (suspenseCallback !== undefined) {
+        warning(false, 'Unexpected type for suspenseCallback.');
+      }
+    }
+  }
+}
+
+function attachSuspenseRetryListeners(finishedWork: Fiber) {
   // If this boundary just timed out, then it will have a set of thenables.
   // For each thenable, attach a listener so that when it resolves, React
   // attempts to re-render the boundary in the primary (pre-timeout) state.

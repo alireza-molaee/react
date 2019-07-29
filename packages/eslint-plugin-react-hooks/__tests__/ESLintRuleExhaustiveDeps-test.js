@@ -12,7 +12,7 @@ const ReactHooksESLintPlugin = require('eslint-plugin-react-hooks');
 const ReactHooksESLintRule = ReactHooksESLintPlugin.rules['exhaustive-deps'];
 
 ESLintTester.setDefaultConfig({
-  parser: 'babel-eslint',
+  parser: require.resolve('babel-eslint'),
   parserOptions: {
     ecmaVersion: 6,
     sourceType: 'module',
@@ -1011,6 +1011,16 @@ const tests = {
             window.addEventListener('resize', handleResize);
             return () => window.removeEventListener('resize', handleResize);
           });
+        }
+      `,
+    },
+    // Ignore Generic Type Variables for arrow functions
+    {
+      code: `
+        function Example({ prop }) {
+          const bar = useEffect(<T>(a: T): Hello => {
+            prop();
+          }, [prop]);
         }
       `,
     },

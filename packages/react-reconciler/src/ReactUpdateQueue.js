@@ -86,6 +86,8 @@
 
 import type {Fiber} from './ReactFiber';
 import type {ExpirationTime} from './ReactFiberExpirationTime';
+import type {SuspenseConfig} from './ReactFiberSuspenseConfig';
+import type {ReactPriorityLevel} from './SchedulerWithReactIntegration';
 
 import {NoWork} from './ReactFiberExpirationTime';
 import {
@@ -101,13 +103,15 @@ import {
 } from 'shared/ReactFeatureFlags';
 
 import {StrictMode} from './ReactTypeOfMode';
-import {markRenderEventTime} from './ReactFiberScheduler';
+import {markRenderEventTimeAndConfig} from './ReactFiberWorkLoop';
 
 import invariant from 'shared/invariant';
 import warningWithoutStack from 'shared/warningWithoutStack';
+import {getCurrentPriorityLevel} from './SchedulerWithReactIntegration';
 
 export type Update<State> = {
   expirationTime: ExpirationTime,
+  suspenseConfig: null | SuspenseConfig,
 
   tag: 0 | 1 | 2 | 3,
   payload: any,
@@ -115,6 +119,9 @@ export type Update<State> = {
 
   next: Update<State> | null,
   nextEffect: Update<State> | null,
+
+  //DEV only
+  priority?: ReactPriorityLevel,
 };
 
 export type UpdateQueue<State> = {
@@ -191,9 +198,13 @@ function cloneUpdateQueue<State>(
   return queue;
 }
 
-export function createUpdate(expirationTime: ExpirationTime): Update<*> {
-  return {
-    expirationTime: expirationTime,
+export function createUpdate(
+  expirationTime: ExpirationTime,
+  suspenseConfig: null | SuspenseConfig,
+): Update<*> {
+  let update: Update<*> = {
+    expirationTime,
+    suspenseConfig,
 
     tag: UpdateState,
     payload: null,
@@ -202,6 +213,10 @@ export function createUpdate(expirationTime: ExpirationTime): Update<*> {
     next: null,
     nextEffect: null,
   };
+  if (__DEV__) {
+    update.priority = getCurrentPriorityLevel();
+  }
+  return update;
 }
 
 function appendUpdateToQueue<State>(
@@ -463,7 +478,7 @@ export function processUpdateQueue<State>(
       // TODO: We should skip this update if it was already committed but currently
       // we have no way of detecting the difference between a committed and suspended
       // update here.
-      markRenderEventTime(updateExpirationTime);
+      markRenderEventTimeAndConfig(updateExpirationTime, update.suspenseConfig);
 
       // Process it and compute a new result.
       resultState = getStateFromUpdate(
